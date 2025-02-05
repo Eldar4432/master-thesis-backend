@@ -1,7 +1,8 @@
+// В server.js или в другом файле с маршрутом
 const express = require("express");
 const mongoose = require("mongoose");
-const Job = require("./models/Job");
-
+const bcrypt = require("bcryptjs");
+const User = require("./models/User");
 const app = express();
 const port = 5000;
 
@@ -16,32 +17,43 @@ mongoose
 
 app.use(express.json()); // Middleware для обработки JSON-запросов
 
-// Получение всех вакансий
-app.get("/jobs", async (req, res) => {
+// Регистрация нового пользователя
+app.post("/register", async (req, res) => {
+  const { username, email, password, role } = req.body;
+
   try {
-    const jobs = await Job.find();
-    res.json(jobs);
+    // Проверка, существует ли пользователь с таким email
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+
+    // Хеширование пароля
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Создание нового пользователя
+    const user = new User({
+      username,
+      email,
+      password: hashedPassword,
+      role: role || "jobseeker", // Роль по умолчанию — jobseeker
+    });
+
+    const newUser = await user.save();
+    res.status(201).json(newUser);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// Создание новой вакансии
-app.post("/jobs", async (req, res) => {
-  const job = new Job({
-    title: req.body.title,
-    company: req.body.company,
-    location: req.body.location,
-    description: req.body.description,
-    requirements: req.body.requirements,
-    responsibilities: req.body.responsibilities,
-  });
-
+// Получение списка пользователей (для админа)
+app.get("/users", async (req, res) => {
   try {
-    const newJob = await job.save();
-    res.status(201).json(newJob);
+    const users = await User.find();
+    res.json(users);
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    res.status(500).json({ message: err.message });
   }
 });
 
