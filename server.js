@@ -1,10 +1,9 @@
-// В server.js или в другом файле с маршрутом
 const express = require("express");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const User = require("./models/User");
 const app = express();
-const port = 5000;
+const port = 5001; // или другой порт
 
 // Подключение к MongoDB
 mongoose
@@ -16,6 +15,11 @@ mongoose
   .catch((err) => console.log("Error connecting to MongoDB:", err));
 
 app.use(express.json()); // Middleware для обработки JSON-запросов
+
+// Простой маршрут для корня
+app.get("/", (req, res) => {
+  res.send("Welcome to the Job Portal API!");
+});
 
 // Регистрация нового пользователя
 app.post("/register", async (req, res) => {
