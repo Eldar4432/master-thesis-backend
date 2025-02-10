@@ -64,3 +64,66 @@ app.get("/users", async (req, res) => {
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });
+
+const jwt = require("jsonwebtoken"); // Подключаем JWT
+const secretKey = "your_secret_key"; // Лучше вынести в .env
+
+// Логин пользователя
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ message: "User not found" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    // Генерируем JWT-токен
+    const token = jwt.sign({ id: user._id, role: user.role }, secretKey, {
+      expiresIn: "7d", // Токен действует 7 дней
+    });
+
+    res.json({ token, role: user.role });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+const authMiddleware = require("./middlewares/authMiddleware");
+const roleMiddleware = require("./middlewares/roleMiddleware");
+
+// Получение всех пользователей (только для админа)
+app.get(
+  "/users",
+  authMiddleware,
+  roleMiddleware(["admin"]),
+  async (req, res) => {
+    try {
+      const users = await User.find();
+      res.json(users);
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  }
+);
+
+// Добавление новой вакансии (только работодатель)
+app.post(
+  "/jobs",
+  authMiddleware,
+  roleMiddleware(["employer"]),
+  async (req, res) => {
+    try {
+      const job = new Job(req.body);
+      await job.save();
+      res.status(201).json(job);
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  }
+);
