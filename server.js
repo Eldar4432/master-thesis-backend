@@ -94,8 +94,8 @@ app.post("/login", async (req, res) => {
   }
 });
 
-const authMiddleware = require("./middlewares/authMiddleware");
-const roleMiddleware = require("./middlewares/roleMiddleware");
+const authMiddleware = require("./models/middlewares/authMiddleware");
+const roleMiddleware = require("./models/middlewares/roleMiddleware");
 
 // Получение всех пользователей (только для админа)
 app.get(
@@ -127,8 +127,6 @@ app.post(
     }
   }
 );
-
-const jwt = require("jsonwebtoken");
 
 // Вход пользователя
 app.post("/login", async (req, res) => {
@@ -185,3 +183,13 @@ const authenticateRole = (role) => {
 app.get("/admin", authenticateRole("admin"), (req, res) => {
   res.send("Welcome Admin!");
 });
+
+const cors = require("cors");
+
+app.use(
+  cors({
+    origin: "http://localhost:3000", // Укажи URL твоего фронтенда
+    methods: "GET,POST,PUT,DELETE",
+    credentials: true,
+  })
+);
