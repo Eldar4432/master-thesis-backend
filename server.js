@@ -1,9 +1,11 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 const User = require("./models/User");
+const cors = require("cors");
 const app = express();
-const port = 5001; // или другой порт
+const port = 5001;
 
 // Подключение к MongoDB
 mongoose
@@ -14,7 +16,18 @@ mongoose
   .then(() => console.log("Connected to MongoDB"))
   .catch((err) => console.log("Error connecting to MongoDB:", err));
 
-app.use(express.json()); // Middleware для обработки JSON-запросов
+// Настройка CORS
+app.use(
+  cors({
+    origin: "http://localhost:3000", // Указание адреса фронтенда
+    methods: "GET,POST,PUT,DELETE", // Разрешенные методы
+    allowedHeaders: "Content-Type, Authorization", // Разрешенные заголовки
+    credentials: true, // Если нужно поддерживать куки или авторизацию
+  })
+);
+
+// Middleware для парсинга JSON в запросах
+app.use(express.json());
 
 // Простой маршрут для корня
 app.get("/", (req, res) => {
@@ -23,8 +36,8 @@ app.get("/", (req, res) => {
 
 // Регистрация нового пользователя
 app.post("/register", async (req, res) => {
-  const { username, email, password, role } = req.body;
-
+  console.log("Request body:", req.body); // Логируем тело запроса
+  const { name, email, password, role } = req.body;
   try {
     // Проверка, существует ли пользователь с таким email
     const existingUser = await User.findOne({ email });
@@ -38,7 +51,7 @@ app.post("/register", async (req, res) => {
 
     // Создание нового пользователя
     const user = new User({
-      username,
+      name, // Используем name вместо username
       email,
       password: hashedPassword,
       role: role || "jobseeker", // Роль по умолчанию — jobseeker
@@ -47,88 +60,12 @@ app.post("/register", async (req, res) => {
     const newUser = await user.save();
     res.status(201).json(newUser);
   } catch (err) {
+    console.error("Error during registration:", err); // Логируем ошибку
     res.status(500).json({ message: err.message });
   }
 });
-
-// Получение списка пользователей (для админа)
-app.get("/users", async (req, res) => {
-  try {
-    const users = await User.find();
-    res.json(users);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
-});
-
-const jwt = require("jsonwebtoken"); // Подключаем JWT
-const secretKey = "your_secret_key"; // Лучше вынести в .env
 
 // Логин пользователя
-app.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-
-  try {
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ message: "User not found" });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Invalid credentials" });
-    }
-
-    // Генерируем JWT-токен
-    const token = jwt.sign({ id: user._id, role: user.role }, secretKey, {
-      expiresIn: "7d", // Токен действует 7 дней
-    });
-
-    res.json({ token, role: user.role });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-const authMiddleware = require("./models/middlewares/authMiddleware");
-const roleMiddleware = require("./models/middlewares/roleMiddleware");
-
-// Получение всех пользователей (только для админа)
-app.get(
-  "/users",
-  authMiddleware,
-  roleMiddleware(["admin"]),
-  async (req, res) => {
-    try {
-      const users = await User.find();
-      res.json(users);
-    } catch (err) {
-      res.status(500).json({ message: err.message });
-    }
-  }
-);
-
-// Добавление новой вакансии (только работодатель)
-app.post(
-  "/jobs",
-  authMiddleware,
-  roleMiddleware(["employer"]),
-  async (req, res) => {
-    try {
-      const job = new Job(req.body);
-      await job.save();
-      res.status(201).json(job);
-    } catch (err) {
-      res.status(500).json({ message: err.message });
-    }
-  }
-);
-
-// Вход пользователя
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
@@ -148,7 +85,7 @@ app.post("/login", async (req, res) => {
       { userId: user._id, role: user.role },
       "your_secret_key",
       {
-        expiresIn: "1h",
+        expiresIn: "1h", // Токен действует 1 час
       }
     );
 
@@ -158,6 +95,9 @@ app.post("/login", async (req, res) => {
   }
 });
 
+// Защищенные маршруты
+
+// Middleware для проверки JWT
 const authenticateRole = (role) => {
   return (req, res, next) => {
     const token = req.headers["authorization"];
@@ -180,16 +120,28 @@ const authenticateRole = (role) => {
   };
 };
 
-app.get("/admin", authenticateRole("admin"), (req, res) => {
-  res.send("Welcome Admin!");
+// Получение всех пользователей (только для админа)
+app.get("/users", authenticateRole("admin"), async (req, res) => {
+  try {
+    const users = await User.find();
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-const cors = require("cors");
+// Добавление новой вакансии (только для работодателя)
+app.post("/jobs", authenticateRole("employer"), async (req, res) => {
+  try {
+    const job = new Job(req.body);
+    await job.save();
+    res.status(201).json(job);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
-app.use(
-  cors({
-    origin: "http://localhost:3000", // Укажи URL твоего фронтенда
-    methods: "GET,POST,PUT,DELETE",
-    credentials: true,
-  })
-);
+// Запуск сервера
+app.listen(port, () => {
+  console.log(`Server is running on http://localhost:${port}`);
+});
