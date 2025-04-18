@@ -2,8 +2,9 @@ const express = require("express");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const User = require("./models/User");
 const cors = require("cors");
+const User = require("./models/User");
+const Job = require("./models/Job");
 const app = express();
 const port = 5001;
 
@@ -36,7 +37,6 @@ app.get("/", (req, res) => {
 
 // Регистрация нового пользователя
 app.post("/register", async (req, res) => {
-  console.log("Request body:", req.body); // Логируем тело запроса
   const { name, email, password, role } = req.body;
   try {
     // Проверка, существует ли пользователь с таким email
@@ -60,7 +60,6 @@ app.post("/register", async (req, res) => {
     const newUser = await user.save();
     res.status(201).json(newUser);
   } catch (err) {
-    console.error("Error during registration:", err); // Логируем ошибку
     res.status(500).json({ message: err.message });
   }
 });
@@ -84,9 +83,7 @@ app.post("/login", async (req, res) => {
     const token = jwt.sign(
       { userId: user._id, role: user.role },
       "your_secret_key",
-      {
-        expiresIn: "1h", // Токен действует 1 час
-      }
+      { expiresIn: "1h" }
     );
 
     res.status(200).json({ token, user });
@@ -120,22 +117,39 @@ const authenticateRole = (role) => {
   };
 };
 
-// Получение всех пользователей (только для админа)
-app.get("/users", authenticateRole("admin"), async (req, res) => {
+// Добавление новой вакансии (только для работодателя)
+app.post("/jobs", authenticateRole("employer"), async (req, res) => {
   try {
-    const users = await User.find();
-    res.json(users);
+    const {
+      title,
+      company,
+      location,
+      description,
+      requirements,
+      responsibilities,
+    } = req.body;
+
+    const job = new Job({
+      title,
+      company,
+      location,
+      description,
+      requirements: requirements || [],
+      responsibilities: responsibilities || [],
+    });
+
+    await job.save();
+    res.status(201).json(job);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// Добавление новой вакансии (только для работодателя)
-app.post("/jobs", authenticateRole("employer"), async (req, res) => {
+// Получение всех вакансий
+app.get("/jobs", async (req, res) => {
   try {
-    const job = new Job(req.body);
-    await job.save();
-    res.status(201).json(job);
+    const jobs = await Job.find();
+    res.json(jobs);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
